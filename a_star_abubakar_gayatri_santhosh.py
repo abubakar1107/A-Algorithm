@@ -2,108 +2,143 @@ import heapq
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
-from collections import defaultdict  
+from collections import defaultdict
+import time
+import os 
 
 def heuristic(a, b):
-    dx = abs(a[0] - b[0])
-    dy = abs(a[1] - b[1])
-    return dx + dy  
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+def is_within_obstacle(x, y, vertices):
+    """Function to check if a point is within an obstacle defined by its vertices."""
+    n = len(vertices)
+    inside = False
+    p1x, p1y = vertices[0]
+    for i in range(n + 1):
+        p2x, p2y = vertices[i % n]
+        if min(p1y, p2y) < y <= max(p1y, p2y) and x <= max(p1x, p2x):
+            if p1y != p2y:
+                xinters = (y - p1y) * (p2x - p1x) / (p2y - p1y) + p1x
+            if p1x == p2x or x <= xinters:
+                inside = not inside
+        p1x, p1y = p2x, p2y
+    return inside
 
 def create_map(map_width, map_height, clearance):
-    
-    # Create a binary grid for pathfinding
     grid_binary = np.zeros((map_height, map_width), dtype=np.uint8)
-
-    # Create a visual map with colors
     grid_visual = np.ones((map_height, map_width, 3), dtype=np.uint8) * 255
 
-    #defining border clearance 
-    cv2.rectangle(grid_binary, (0, 0), (map_width, map_height), 1, clearance)
+    obstacles = [
+        {'type': 'rectangle', 'vertices': [(100//2, 100//2), (175//2, 500//2)], 'color': [50, 50, 200]},
+        {'type': 'rectangle', 'vertices': [(275//2, 0//2), (350//2, 400//2)], 'color': [0, 100, 100]},
+        {'type': 'rectangle', 'vertices': [(900//2, 50//2), (1100//2, 125//2)], 'color': [80, 200, 100]},
+        {'type': 'rectangle', 'vertices': [(900//2, 375//2), (1100//2, 450//2)], 'color': [80, 200, 100]},
+        {'type': 'rectangle', 'vertices': [(1020//2, 125//2), (1100//2, 375//2)], 'color': [80, 200, 100]},
+        {'type': 'polygon', 'vertices': np.array([[650//2, 120//2], [537//2, 185//2], [537//2, 315//2], [650//2, 380//2], [763//2, 315//2], [763//2, 185//2]]), 'color': [200, 200, 0]}
+    ]
 
-    # clear inner part of the border to get free space
-    cv2.rectangle(grid_binary, (clearance, clearance), (map_width-clearance, map_height-clearance), 0, -1)
+    for obstacle in obstacles:
+        if obstacle['type'] == 'rectangle':
+            x_min, y_min = obstacle['vertices'][0]
+            x_max, y_max = obstacle['vertices'][1]
+            grid_binary[y_min:y_max+1, x_min:x_max+1] = 1
+            grid_visual[y_min:y_max+1, x_min:x_max+1] = obstacle['color']
+        elif obstacle['type'] == 'polygon':
+            for y in range(map_height):
+                for x in range(map_width):
+                    if is_within_obstacle(x, y, obstacle['vertices']):
+                        grid_binary[y, x] = 1
+                        grid_visual[y, x] = obstacle['color']
 
-    # Visual representation of borders with clearance
-    cv2.rectangle(grid_visual, (0, 0), (map_width, map_height), (255, 0, 0), clearance)
-
-    #rectangular obstacles into the binary grid and visual grid
-    cv2.rectangle(grid_binary, (100, 100), (175, 500), 1, -1)
-    cv2.rectangle(grid_visual, (100, 100), (175, 500), (255, 150, 0), -1)
-
-    cv2.rectangle(grid_binary, (275, 0), (350, 400), 1, -1)
-    cv2.rectangle(grid_visual, (275, 0), (350, 400), (150, 255, 0), -1)
-
-    cv2.rectangle(grid_binary, (900, 50), (1100, 125), 1, -1)
-    cv2.rectangle(grid_visual, (900, 50), (1100, 125), (150, 80, 0), -1)
-
-    cv2.rectangle(grid_binary, (900, 375), (1100, 450), 1, -1)
-    cv2.rectangle(grid_visual, (900, 375), (1100, 450), (150, 80, 0), -1)
-
-    cv2.rectangle(grid_binary, (1020, 125), (1100, 375), 1, -1)
-    cv2.rectangle(grid_visual, (1020, 125), (1100, 375), (150, 80, 0), -1)
-
-    #hexagonal obstacle into the binary grid and visual grid 
-    hexagon = np.array([[650, 120], [537, 185], [537, 315], [650, 380], [763, 315], [763, 185]], np.int32)
-    cv2.fillPoly(grid_binary, [hexagon], 1)
-    cv2.fillPoly(grid_visual, [hexagon], (0, 0, 200))
-
-
-    kernel = np.ones((2*clearance+1, 2*clearance+1), np.uint8)
+    # Apply clearance using dilation
+    kernel = np.ones((2 * clearance + 1, 2 * clearance + 1), np.uint8)
     grid_binary = cv2.dilate(grid_binary, kernel, iterations=1)
-    
+    # Re-apply border after dilation
+    cv2.rectangle(grid_visual, (0, 0), (map_width - 1, map_height - 1), (255, 0, 0), clearance)
+
     return grid_binary, grid_visual
 
-def validate_goal(grid_binary, goal):
-    if grid_binary[goal[1], goal[0]] == 1:
-        raise ValueError("Goal position not reachable: It is within an obstacle space.")
+neighbor_cache = {}  # Cache to store neighbors
 
 def get_neighbors(node, L):
-    x, y, theta = node
+    # Check if the node's neighbors are in the cache
+    if node in neighbor_cache:
+        return neighbor_cache[node]
+    
     neighbors = []
-    for dtheta in [0, 30, 60, -30, -60]:  # Given action set in degrees
-        new_theta = (theta + dtheta) % 360  # Ensure theta stays within [0, 360)
-        # Convert theta to radians for calculation
+    for dtheta in [0, 30, 60, -30, -60]:
+        new_theta = (node[2] + dtheta) % 360
         theta_rad = np.radians(new_theta)
-        # Calculate new position based on heading and step size
-        new_x = x + L * np.cos(theta_rad)
-        new_y = y + L * np.sin(theta_rad)
+        new_x = node[0] + L * np.cos(theta_rad)
+        new_y = node[1] + L * np.sin(theta_rad)
         neighbors.append((new_x, new_y, new_theta))
+    
+    # Store the calculated neighbors in the cache
+    neighbor_cache[node] = neighbors
     return neighbors
 
-def a_star(start, goal, grid, grid_visual, L):
+def orientation_difference(theta1, theta2):
+    # Calculate the smallest difference between two angles
+    return min(abs(theta1 - theta2), 360 - abs(theta1 - theta2))
+
+def is_in_obstacle_or_clearance(node, grid, clearance):
+    x, y = int(node[0]), int(node[1])
+    
+    obstacle_space = cv2.dilate(grid, np.ones((clearance*2+1, clearance*2+1), np.uint8), iterations=1)
+    return obstacle_space[y, x] == 1
+
+def a_star(start, goal, grid, grid_visual, L, clearance=5):
+
     open_set = []
-    heapq.heappush(open_set, (0 + heuristic(start[:2], goal[:2]), 0, start))
+    heapq.heappush(open_set, (heuristic(start[:2], goal[:2]), 0, start))
     came_from = {}
     g_score = {start: 0}
-    height = grid_visual.shape[0]
-    closed_set = defaultdict(bool)  
+    closed_set = set()
+
+    orientation_threshold = 9 
+    current_batch_size = 1
+    max_batch_size = 100  
+    nodes_explored = 0  
+    updates_to_visualize = [] 
 
     while open_set:
-        current_f, current_g, current = heapq.heappop(open_set)
-        x, y, _ = current
+        _, current_g, current = heapq.heappop(open_set)
 
-        if heuristic(current[:2], goal[:2]) <= 10: 
-            path = []
-            while current in came_from:
-                path.append(current)
-                current = came_from[current]
-            path = path[::-1]
+        # Check proximity to goal location, not orientation yet
+        if heuristic(current[:2], goal[:2]) <= 10:
+            
+            if orientation_difference(current[2], goal[2]) <= orientation_threshold:
+                # Finalize the path with orientation adjusted
+                path = []
+                while current in came_from:
+                    rounded_node = tuple(round(coord, 2) for coord in current) 
+                    path.append(rounded_node)
+                    current = came_from[current]
+                start_rounded = tuple(round(coord, 2) for coord in start)
+                path.append(start_rounded)
+                path.reverse()
+                
+                for update in updates_to_visualize:
+                    cv2.line(grid_visual, *update, (255, 0, 0), 1)
+                updates_to_visualize.clear()  # Clear the updates after visualizing
 
-            # Draw the final path 
-            for i in range(1, len(path)):
-                cv2.line(grid_visual, 
-                        (int(path[i-1][0]), int(path[i-1][1])), 
-                        (int(path[i][0]), int(path[i][1])), 
-                        (0, 255, 0), 2)
-            return path, grid_visual
+                # Drawing the final path
+                for i in range(1, len(path)):
+                    
+                    cv2.line(grid_visual, (int(path[i-1][0]), int(path[i-1][1])), (int(path[i][0]), int(path[i][1])), (0, 255, 0), 2)
+                    
+                cv2.imshow("Final Path", cv2.flip(grid_visual, 0))
+                cv2.waitKey(0)
+                
+                return path, grid_visual, time_elapsed
 
-        closed_set[current] = True  # Mark as explored
+        closed_set.add(current)
 
         for neighbor in get_neighbors(current, L):
             x, y, _ = neighbor
             if 0 <= x < grid.shape[1] and 0 <= y < grid.shape[0] and grid[int(y), int(x)] == 0:
                 if neighbor in closed_set:
-                    continue  # Skip already explored nodes
+                    continue
 
                 tentative_g_score = current_g + L
                 if tentative_g_score < g_score.get(neighbor, float('inf')):
@@ -112,33 +147,34 @@ def a_star(start, goal, grid, grid_visual, L):
                     f_score = tentative_g_score + heuristic(neighbor[:2], goal[:2])
                     heapq.heappush(open_set, (f_score, tentative_g_score, neighbor))
 
-                    # Real-time visualization 
-                    cv2.line(grid_visual,
-                            (int(current[0]), int(current[1])),
-                            (int(neighbor[0]), int(neighbor[1])),
-                            (255, 0, 0), 1)
-                    cv2.imshow("Explored Nodes and Path", cv2.flip(grid_visual, 0)) 
+                    updates_to_visualize.append(((int(current[0]), int(current[1])), (int(neighbor[0]), int(neighbor[1]))))
 
-                    if cv2.waitKey(10) & 0xFF == ord('q'):  # Press 'q' to quit
-                        return None, grid_visual  
+        nodes_explored += 1
+        # Batch visualization logic
+        if len(updates_to_visualize) >= current_batch_size:
+            for update in updates_to_visualize:
+                
+                cv2.line(grid_visual, *update, (255, 0, 0), 1)
+            cv2.imshow("Exploration in Progress", cv2.flip(grid_visual, 0))
+            cv2.waitKey(1)  
+            updates_to_visualize.clear()  
+       
+        current_batch_size = min(max_batch_size, 1 + nodes_explored // 100)
 
-    return None, grid_visual  # If no path is found
+    cv2.destroyAllWindows()
+    return None, grid_visual 
 
-# Define the grid size and create the map
-map_width, map_height = 1200, 500
-grid_binary, grid_visual = create_map(map_width, map_height, 5)
+if __name__ == "__main__":
+    map_width, map_height = 600, 250
+    grid_binary, grid_visual = create_map(map_width, map_height, 5)
 
-start = (10, 10, 10)  # Starting position with orientation
-goal = (700, 400, 0)  # Goal position with orientation
-L = 50  # Step size
+    start = (10, 10, 10)  
+    goal = (350, 200, 45)
+    L = 10  # Step size
 
-# Visualize the exploration on a map
-path, grid_visual = a_star(start, goal, grid_binary, grid_visual, L)
-if path:
-    print("Path found:", path)
-else:
-    print("No path found.")
+    path, grid_visual, time_elapsed = a_star(start, goal, grid_binary, grid_visual, L)
 
-cv2.imshow("Explored Nodes and Path", cv2.flip(grid_visual, 0))
-cv2.waitKey(0)
-cv2.destroyAllWindows()
+    if path:
+        print("\n\nPath found: \n",path)
+    else:
+        print("No path found!!!")
