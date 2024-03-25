@@ -21,8 +21,8 @@ A Python script that implements the A* algorithm for pathfinding in a 2D environ
 
 **Configuration**:
 - **Canvas Size**: 600x250 units.
-- **Start Node used in Video**: (10, 10, 10) (x, y, orientation).
-- **Goal Node used in Video**: (350, 200, 45) (x, y, orientation).
+- **Start Node used in Video**: (10, 10, 10) as (x, y, orientation).
+- **Goal Node used in Video**: (400, 190, 45) as (x, y, orientation).
 - **Step Size (L) used**: 10 units.
 - **Clearance**: 5 units from obstacles.
 
