@@ -1,4 +1,3 @@
-# Import Libraries 
 import heapq
 import numpy as np
 import matplotlib.pyplot as plt
@@ -26,6 +25,14 @@ def is_within_obstacle(x, y, vertices):
         p1x, p1y = p2x, p2y
     return inside
 
+def generate_hexagon(centre, side_length):
+    angle_start = np.pi / 6  # Starting angle for hexagon vertices calculation
+    return [
+        (int(centre[0] + np.cos(angle_start + np.pi / 3 * i) * side_length),
+         int(centre[1] + np.sin(angle_start + np.pi / 3 * i) * side_length))
+        for i in range(6)
+    ]
+
 def create_map(map_width, map_height, clearance):
 
     """Function to create the map with specified obstacle space"""
@@ -33,13 +40,16 @@ def create_map(map_width, map_height, clearance):
     grid_binary = np.zeros((map_height, map_width), dtype=np.uint8)
     grid_visual = np.ones((map_height, map_width, 3), dtype=np.uint8) * 255
 
+    hex_center = (650//2, 250//2)
+    hex_side_length = 150//2
+
     obstacles = [
         {'type': 'rectangle', 'vertices': [(100//2, 100//2), (175//2, 500//2)], 'color': [50, 50, 200]},
         {'type': 'rectangle', 'vertices': [(275//2, 0//2), (350//2, 400//2)], 'color': [0, 100, 100]},
         {'type': 'rectangle', 'vertices': [(900//2, 50//2), (1100//2, 125//2)], 'color': [80, 200, 100]},
         {'type': 'rectangle', 'vertices': [(900//2, 375//2), (1100//2, 450//2)], 'color': [80, 200, 100]},
         {'type': 'rectangle', 'vertices': [(1020//2, 125//2), (1100//2, 375//2)], 'color': [80, 200, 100]},
-        {'type': 'polygon', 'vertices': np.array([[650//2, 120//2], [537//2, 185//2], [537//2, 315//2], [650//2, 380//2], [763//2, 315//2], [763//2, 185//2]]), 'color': [200, 200, 0]}
+        {'type': 'polygon', 'vertices': generate_hexagon(hex_center, hex_side_length), 'color': [200, 200, 0]}
     ]
 
     for obstacle in obstacles:
@@ -119,9 +129,9 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
     g_score = {start: 0}
     closed_set = set()
 
-    orientation_threshold = 9  # Orientation threshold in Degrees
+    orientation_threshold = 10  # Orientation threshold in Degrees
     current_batch_size = 1  
-    max_batch_size = 100  # Maximum batch size for faster visualization
+    max_batch_size = 150  # Maximum batch size for faster visualization
     nodes_explored = 0  
     updates_to_visualize = []  # Stores the updates (lines) to visualize in batches
 
@@ -178,6 +188,7 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
 
         nodes_explored += 1
 
+        
         # Batch wise visualization logic
         if len(updates_to_visualize) >= current_batch_size:
             for update in updates_to_visualize:
@@ -188,6 +199,7 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
             cv2.waitKey(1)  # Short delay for the visualization to update
             updates_to_visualize.clear()  # Clear the updates after visualizing
 
+        
         # Adjust the batch size for visualization dynamically (linear increase of batch size)
         current_batch_size = min(max_batch_size, 1 + nodes_explored // 100)
 
@@ -225,3 +237,4 @@ if __name__ == "__main__":
                path,"\n\n<><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n")
     else:
         print("No path found!!!")
+
