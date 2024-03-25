@@ -4,10 +4,13 @@
 2. Gayatri Davuluri | DirectoryID: gayatrid | UID: 120304866
 3. Dhana Santhosh Reddy Jangama Reddy | DirectoryID: js5162 | UID: 120405570
 
+
+
 # A* Pathfinding Algorithm
 
 A Python script that implements the A* algorithm for pathfinding in a 2D environment, considering obstacles, clearance, and orientation.
 
+## Github link: https://github.com/abubakar1107/A-Algorithm/tree/main
 ## Features
 
 - Efficient pathfinding with the A* algorithm.
