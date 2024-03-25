@@ -1,3 +1,4 @@
+# Import Libraries 
 import heapq
 import numpy as np
 import matplotlib.pyplot as plt
@@ -7,6 +8,7 @@ import time
 import os 
 
 def heuristic(a, b):
+    """Heuristic function that returns the manhattan distance between two nodes or points"""
     return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 def is_within_obstacle(x, y, vertices):
@@ -25,6 +27,9 @@ def is_within_obstacle(x, y, vertices):
     return inside
 
 def create_map(map_width, map_height, clearance):
+
+    """Function to create the map with specified obstacle space"""
+
     grid_binary = np.zeros((map_height, map_width), dtype=np.uint8)
     grid_visual = np.ones((map_height, map_width, 3), dtype=np.uint8) * 255
 
@@ -61,15 +66,20 @@ def create_map(map_width, map_height, clearance):
 neighbor_cache = {}  # Cache to store neighbors
 
 def get_neighbors(node, L):
+
+    """Function that computes the child nodes or neighbour nodes"""
+
     # Check if the node's neighbors are in the cache
     if node in neighbor_cache:
         return neighbor_cache[node]
     
     neighbors = []
+
+    #calculating new nodes for the entire action set
     for dtheta in [0, 30, 60, -30, -60]:
         new_theta = (node[2] + dtheta) % 360
         theta_rad = np.radians(new_theta)
-        new_x = node[0] + L * np.cos(theta_rad)
+        new_x = node[0] + L * np.cos(theta_rad) 
         new_y = node[1] + L * np.sin(theta_rad)
         neighbors.append((new_x, new_y, new_theta))
     
@@ -83,15 +93,19 @@ def orientation_difference(theta1, theta2):
 
 def is_in_obstacle_or_clearance(node, grid, clearance):
 
+    """Function to check if the start and goal node are in obstacle or clearance space"""
+
     x, y = int(node[0]), int(node[1])
     obstacle_space = cv2.dilate(grid, np.ones((clearance*2+1, clearance*2+1), np.uint8), iterations=1)
     return obstacle_space[y, x] == 1
 
 def a_star(start, goal, grid, grid_visual, L, clearance=5):
 
-    start_time = time.time() #Starting the program
+    """A* logic"""
 
-    # Check if start or goal is in an obstacle or within the clearance space
+    start_time = time.time()
+
+    # Check if start node or goal node is in an obstacle or within the clearance space
     if is_in_obstacle_or_clearance(start, grid, clearance):
         print("\n-------------------\nStart Co-ordinates and orientation are invalid\n-------------------")
         raise ValueError("Start Node is within an obstacle or the specified clearance space.")
@@ -105,16 +119,16 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
     g_score = {start: 0}
     closed_set = set()
 
-    orientation_threshold = 9
-    current_batch_size = 1
-    max_batch_size = 100  
+    orientation_threshold = 9  # Orientation threshold in Degrees
+    current_batch_size = 1  
+    max_batch_size = 100  # Maximum batch size for faster visualization
     nodes_explored = 0  
-    updates_to_visualize = []
+    updates_to_visualize = []  # Stores the updates (lines) to visualize in batches
 
     while open_set:
         _, current_g, current = heapq.heappop(open_set)
 
-        # Check proximity to goal location
+        # Check proximity to goal location, not orientation yet
         if heuristic(current[:2], goal[:2]) <= 10:
             
             if orientation_difference(current[2], goal[2]) <= orientation_threshold:
@@ -130,17 +144,16 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
                 end_time = time.time()
                 time_elapsed = end_time-start_time
 
-                
                 for update in updates_to_visualize:
                     cv2.line(grid_visual, *update, (255, 0, 0), 1)
-                updates_to_visualize.clear()  
+                updates_to_visualize.clear()  # Clear the updates after visualizing
 
-                # Drawing the final path
+                # Plotting the final path
                 for i in range(1, len(path)):
                     cv2.circle(grid_visual, start[:2], 5, (0,0,255),-1)
                     cv2.circle(grid_visual, goal[:2], 5, (0,0,0),-1)
                     cv2.line(grid_visual, (int(path[i-1][0]), int(path[i-1][1])), (int(path[i][0]), int(path[i][1])), (0, 255, 0), 2)
-                    
+
                 cv2.imshow("Final Path", cv2.flip(grid_visual, 0))
                 cv2.waitKey(0)
                 
@@ -164,7 +177,8 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
                     updates_to_visualize.append(((int(current[0]), int(current[1])), (int(neighbor[0]), int(neighbor[1]))))
 
         nodes_explored += 1
-        # Batch visualization logic
+
+        # Batch wise visualization logic
         if len(updates_to_visualize) >= current_batch_size:
             for update in updates_to_visualize:
                 cv2.circle(grid_visual, start[:2], 5, (0,0,255),-1)
@@ -174,21 +188,35 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
             cv2.waitKey(1)  # Short delay for the visualization to update
             updates_to_visualize.clear()  # Clear the updates after visualizing
 
-        # Adjust the batch size for visualization dynamically
+        # Adjust the batch size for visualization dynamically (linear increase of batch size)
         current_batch_size = min(max_batch_size, 1 + nodes_explored // 100)
 
     cv2.destroyAllWindows()
     return None, grid_visual 
 
 if __name__ == "__main__":
+
+    #canvas size of 600x250 units
     map_width, map_height = 600, 250
     grid_binary, grid_visual = create_map(map_width, map_height, 5)
 
-    start = (10, 10, 10)  
-    goal = (350, 200, 45)
-    L = 10  # Step size
+    x_start = int(input("Enter the Start Node X coordinate:"))
+    y_start = int(input("Enter the Start Node Y coordinate:"))
+    theta_start = int(input("Enter the Start Node Orientation:"))
+    print("\n------------------------------------\n")
+    x_goal = int(input("Enter the Goal Node X coordinate:"))
+    y_goal = int(input("Enter the Goal Node Y coordinate:"))
+    theta_goal = int(input("Enter the Goal Node Orientation:"))
 
+    # start = (10, 10, 10)  
+    # goal = (350, 200, 45)
+
+    start = (x_start,y_start,theta_start)
+    goal = (x_goal,y_goal,theta_goal)
+    L = 10  # Step size
     
+    print("\n----Path calculation started----\n")
+
     path, grid_visual, time_elapsed = a_star(start, goal, grid_binary, grid_visual, L)
     
 
@@ -197,4 +225,3 @@ if __name__ == "__main__":
                path,"\n\n<><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n")
     else:
         print("No path found!!!")
-
