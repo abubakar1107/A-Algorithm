@@ -82,29 +82,39 @@ def orientation_difference(theta1, theta2):
     return min(abs(theta1 - theta2), 360 - abs(theta1 - theta2))
 
 def is_in_obstacle_or_clearance(node, grid, clearance):
+
     x, y = int(node[0]), int(node[1])
-    
     obstacle_space = cv2.dilate(grid, np.ones((clearance*2+1, clearance*2+1), np.uint8), iterations=1)
     return obstacle_space[y, x] == 1
 
 def a_star(start, goal, grid, grid_visual, L, clearance=5):
 
+    start_time = time.time() #Starting the program
+
+    # Check if start or goal is in an obstacle or within the clearance space
+    if is_in_obstacle_or_clearance(start, grid, clearance):
+        print("\n-------------------\nStart Co-ordinates and orientation are invalid\n-------------------")
+        raise ValueError("Start Node is within an obstacle or the specified clearance space.")
+    if is_in_obstacle_or_clearance(goal, grid, clearance):
+        print("\n-------------------\nGoal Co-ordinates and orientation are invalid\n-------------------")
+        raise ValueError("Goal Node is within an obstacle or the specified clearance space.")
+    
     open_set = []
     heapq.heappush(open_set, (heuristic(start[:2], goal[:2]), 0, start))
     came_from = {}
     g_score = {start: 0}
     closed_set = set()
 
-    orientation_threshold = 9 
+    orientation_threshold = 9
     current_batch_size = 1
     max_batch_size = 100  
     nodes_explored = 0  
-    updates_to_visualize = [] 
+    updates_to_visualize = []
 
     while open_set:
         _, current_g, current = heapq.heappop(open_set)
 
-        # Check proximity to goal location, not orientation yet
+        # Check proximity to goal location
         if heuristic(current[:2], goal[:2]) <= 10:
             
             if orientation_difference(current[2], goal[2]) <= orientation_threshold:
@@ -117,14 +127,18 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
                 start_rounded = tuple(round(coord, 2) for coord in start)
                 path.append(start_rounded)
                 path.reverse()
+                end_time = time.time()
+                time_elapsed = end_time-start_time
+
                 
                 for update in updates_to_visualize:
                     cv2.line(grid_visual, *update, (255, 0, 0), 1)
-                updates_to_visualize.clear()  # Clear the updates after visualizing
+                updates_to_visualize.clear()  
 
                 # Drawing the final path
                 for i in range(1, len(path)):
-                    
+                    cv2.circle(grid_visual, start[:2], 5, (0,0,255),-1)
+                    cv2.circle(grid_visual, goal[:2], 5, (0,0,0),-1)
                     cv2.line(grid_visual, (int(path[i-1][0]), int(path[i-1][1])), (int(path[i][0]), int(path[i][1])), (0, 255, 0), 2)
                     
                 cv2.imshow("Final Path", cv2.flip(grid_visual, 0))
@@ -153,12 +167,14 @@ def a_star(start, goal, grid, grid_visual, L, clearance=5):
         # Batch visualization logic
         if len(updates_to_visualize) >= current_batch_size:
             for update in updates_to_visualize:
-                
+                cv2.circle(grid_visual, start[:2], 5, (0,0,255),-1)
+                cv2.circle(grid_visual, goal[:2], 5, (0,0,0),-1)
                 cv2.line(grid_visual, *update, (255, 0, 0), 1)
             cv2.imshow("Exploration in Progress", cv2.flip(grid_visual, 0))
-            cv2.waitKey(1)  
-            updates_to_visualize.clear()  
-       
+            cv2.waitKey(1)  # Short delay for the visualization to update
+            updates_to_visualize.clear()  # Clear the updates after visualizing
+
+        # Adjust the batch size for visualization dynamically
         current_batch_size = min(max_batch_size, 1 + nodes_explored // 100)
 
     cv2.destroyAllWindows()
@@ -172,9 +188,13 @@ if __name__ == "__main__":
     goal = (350, 200, 45)
     L = 10  # Step size
 
+    
     path, grid_visual, time_elapsed = a_star(start, goal, grid_binary, grid_visual, L)
+    
 
     if path:
-        print("\n\nPath found: \n",path)
+        print("\n\nPath found in",time_elapsed," seconds","\n\n<><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n\n", 
+               path,"\n\n<><><><><><><><><><><><><><><><><><><><><><><><><><><><>\n")
     else:
         print("No path found!!!")
+
