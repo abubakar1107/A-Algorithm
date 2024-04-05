@@ -25,7 +25,7 @@ def create_map(map_width, map_height, clearance):
     cv2.rectangle(grid_binary, (clearance, clearance), (map_width-clearance, map_height-clearance), 0, -1)
 
     # Visual representation of borders with clearance
-    cv2.rectangle(grid_visual, (0, 0), (map_width, map_height), (255, 0, 0), clearance)
+    cv2.rectangle(grid_visual, (0, 0), (map_width, map_height), (255, 255, 255), clearance)
 
     #rectangular obstacles into the binary grid and visual grid
     cv2.rectangle(grid_binary, (100, 100), (175, 500), 1, -1)
@@ -116,20 +116,46 @@ def a_star(start, goal, grid, L, clearance):
     return None
 
 # Assume the `create_map` function is defined elsewhere or replace this with your own map creation logic
-grid_binary, grid_visual = create_map(600, 250, 5) # This needs to be defined
+grid_binary, grid_visual = create_map(1200, 500, 5) # This needs to be defined
 
 # Start and goal positions
-start = (25, 25, 30)  # Example start position
-goal = (575, 25, 30)  # Example goal position
+start = (50, 50, 30)  # Example start position
+goal = (1150, 50, 30)  # Example goal position
 L = 10  # Movement increment
 
 # Call the a_star function
+# Call the a_star function
 path = a_star(start, goal, grid_binary, L, 5)
 
-# If a path is found, print the path
+# If a path is found, visualize the path
 if path:
     print("Path found:")
     for step in path:
-        print(step)
+        # Since we flip the image later, invert the y-coordinate here
+        print((step[0], grid_visual.shape[0] - step[1], step[2]))
+
+    # Flip the visual grid along the horizontal axis
+    flipped_visual = cv2.flip(grid_visual, 0)
+
+    for i in range(len(path)-1):
+        # Since we flip the image later, invert the y-coordinate here
+        start_point = (int(path[i][0]), grid_visual.shape[0] - int(path[i][1]))
+        end_point = (int(path[i+1][0]), grid_visual.shape[0] - int(path[i+1][1]))
+        # Draw lines between each pair of points
+        cv2.line(flipped_visual, start_point, end_point, (0, 255, 0), 2)  # Green line for the path
+
+    # Invert the y-coordinate of the start and goal for visualization due to flipping
+    start_vis = (int(start[0]), grid_visual.shape[0] - int(start[1]))
+    goal_vis = (int(goal[0]), grid_visual.shape[0] - int(goal[1]))
+
+    # Mark the start and goal positions
+    cv2.circle(flipped_visual, start_vis, 10, (255, 0, 0), -1)  # Start position in blue
+    cv2.circle(flipped_visual, goal_vis, 10, (0, 0, 255), -1)  # Goal position in red
+    cv2.imshow("Path", flipped_visual)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
 else:
     print("No path found.")
+
+
+
