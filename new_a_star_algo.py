@@ -1,5 +1,6 @@
 import heapq
 import numpy as np
+import cProfile
 import cv2
 from collections import defaultdict, namedtuple
 
@@ -52,6 +53,8 @@ def create_map(map_width, map_height, clearance):
     kernel = np.ones((2*clearance+1, 2*clearance+1), np.uint8)
     grid_binary = cv2.dilate(grid_binary, kernel, iterations=1)
     
+    cv2.rectangle(grid_binary, (0, 0), (map_width-1, map_height-1), 1, clearance)
+
     return grid_binary, grid_visual
 
 def get_neighbors(node, grid, L, clearance):
@@ -67,7 +70,12 @@ def get_neighbors(node, grid, L, clearance):
 
 def is_in_obstacle_or_clearance(point, grid, clearance):
     # Checking if the point is within the obstacle map considering clearance
+    # Account for the map boundaries
     x, y = int(point[0]), int(point[1])
+    if x - clearance < 0 or x + clearance >= grid.shape[1]:
+        return True
+    if y - clearance < 0 or y + clearance >= grid.shape[0]:
+        return True
     return grid[y-clearance:y+clearance+1, x-clearance:x+clearance+1].any()
 
 def a_star(start, goal, grid, L, clearance):
@@ -115,6 +123,9 @@ def a_star(start, goal, grid, L, clearance):
              
     return None
 
+
+profiler = cProfile.Profile()
+profiler.enable()
 # Assume the `create_map` function is defined elsewhere or replace this with your own map creation logic
 grid_binary, grid_visual = create_map(1200, 500, 5) # This needs to be defined
 
@@ -157,5 +168,7 @@ if path:
 else:
     print("No path found.")
 
+profiler.disable()
+profiler.print_stats()    
 
 
