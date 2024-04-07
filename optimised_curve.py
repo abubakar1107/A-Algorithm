@@ -11,7 +11,7 @@ robot_diameter_mm = 306  # Approximation to the larger dimension in mm for clear
 user_clearance_mm = 50  # Additional clearance
 total_clearance_mm = int((robot_diameter_mm / 2) + user_clearance_mm)
 map_width, map_height = 6000, 2000  # Map dimensions in pixels (assuming 1 pixel = 1 mm for simplicity)
-R1 = 30
+R1 = 50
 R2 = 50
 actions = [[0, R1], [R1, 0], [R1, R1], [0, R2], [R2, 0], [R2, R2], [R1, R2], [R2, R1]]
 # Weight for the heuristic function
@@ -238,10 +238,6 @@ def visualize_exploration(base_obstacle_map, came_from, current):
     cv2.imshow('Exploration with Actual Curves', resized_vis_map)
     cv2.waitKey(1)
 
-
-
-
-
 def visualize_path(base_obstacle_map, path, start, goal):
     # Visualize the final path
     vis_map = base_obstacle_map.copy()
@@ -251,7 +247,7 @@ def visualize_path(base_obstacle_map, path, start, goal):
         # Scale path coordinates according to the resized map
         scaled_start = (int(path[i][0] * scale_percent / 100), int(path[i][1] * scale_percent / 100))
         scaled_end = (int(path[i+1][0] * scale_percent / 100), int(path[i+1][1] * scale_percent / 100))
-        cv2.line(resized_vis_map, scaled_start, scaled_end, (0, 0, 0), 1)
+        cv2.line(resized_vis_map, scaled_start, scaled_end, (0, 0, 0), 2)
     cv2.imshow('Final Path', resized_vis_map)
     cv2.waitKey(0)
     # cv2.destroyAllWindows()
@@ -273,6 +269,8 @@ def reconstruct_path(came_from, current):
 
 
 def execute_path( path, rpm_actions,obstacle_map, visualization=True):
+    velocities = []
+    # ang_z = []
     if visualization:
         # map = obstacle_map.copy()
         vis_map = resize_map_for_display(obstacle_map, 20)
@@ -287,9 +285,9 @@ def execute_path( path, rpm_actions,obstacle_map, visualization=True):
     for i, action in enumerate(rpm_actions):
         # Convert RPM actions to linear and angular velocities
         linear_x, angular_z = rpm_to_velocity([action], R, L)[0]  # Assuming rpm_to_velocity returns a list of [linear_x, angular_z]
-        
-        print(linear_x,'x')
-        print(-angular_z)
+        velocities.append((linear_x/1000,-angular_z))
+    
+    print(velocities)
 
 def get_valid_position(prompt, obstacle_map):
     while True:
