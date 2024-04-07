@@ -15,16 +15,29 @@ R1 = 50
 R2 = 150
 actions = [[0, R1], [R1, 0], [R1, R1], [0, R2], [R2, 0], [R2, R2], [R1, R2], [R2, R1]]
 # Weight for the heuristic function
-HEURISTIC_WEIGHT = 1.5  # Typical values might range from 1 to 2
+HEURISTIC_WEIGHT = 20 # Typical values might range from 1 to 2
 
 def create_map(width, height, clearance):
     obstacle_map = np.ones((height, width, 3), dtype=np.uint8) * 255  # White background
+
+    # Add obstacles with clearance
     cv2.rectangle(obstacle_map, (1500 - clearance, 0 - clearance), (1750 + clearance, 1000 + clearance), (255,0,0), -1)
     cv2.rectangle(obstacle_map, (2500 - clearance, 1000 - clearance), (2750 + clearance, 2000 + clearance), (0,255,0), -1)
     cv2.circle(obstacle_map, (4200, 800), 600 + clearance, (0, 0, 255), -1)
+    
+    # Add clearance to the walls of the map
+    # Top border
+    cv2.rectangle(obstacle_map, (0, 0), (width, clearance//10), (0,0,255), -1)
+    # Bottom border
+    cv2.rectangle(obstacle_map, (0, height - (clearance//10)), (width, height), (0,0,255), -1)
+    # Left border
+    cv2.rectangle(obstacle_map, (0, 0), (clearance//10, height), (0,0,255), -1)
+    # Right border
+    cv2.rectangle(obstacle_map, (width - (clearance//10), 0), (width, height), (0,0,255), -1)
+
     return obstacle_map
 
-def calculate_new_position(x, y, theta, UL, UR, dt=0.1):
+def calculate_new_position(x, y, theta, UL, UR, dt=0.6):
     Vl = UL * (2 * np.pi * R) / 60
     Vr = UR * (2 * np.pi * R) / 60
     Dx = (Vl + Vr) / 2 * np.cos(np.radians(theta)) * dt
@@ -64,6 +77,14 @@ def rpm_to_velocity(actions, R, L):
         converted_actions.append([linear_x, angular_z])
     
     return converted_actions
+
+def validate_position(x, y, obstacle_map):
+    """
+    Check if a given position is within the allowed space.
+    """
+    if x < 0 or y < 0 or x >= obstacle_map.shape[1] or y >= obstacle_map.shape[0]:
+        return False  # Position is out of map bounds
+    return np.all(obstacle_map[int(y), int(x)] == [255, 255, 255])
 
 def a_star(start, goal, actions, base_obstacle_map, visualization=True):
     open_set = []
@@ -176,11 +197,23 @@ def execute_path( path, rpm_actions,obstacle_map, visualization=True):
         print(linear_x,'x')
         print(-angular_z)
 
+def get_valid_position(prompt, obstacle_map):
+    while True:
+        position_str = input(prompt)  # Example format input: "x,y,theta"
+        x, y, theta = map(int, position_str.split(','))
+        if validate_position(x, y, obstacle_map):
+            return x, y, theta
+        else:
+            print("Invalid position. The position is either out of bounds or within an obstacle.")
+
+
 
 def main(args=None):
     obstacle_map = create_map(map_width, map_height, total_clearance_mm)
     start = (500, 1000, 0)  # Start position
     goal = (5750, 1000, 0)  # Goal position, ensure to have a consistent format with start
+    # start = (100,1900, 0)
+    # goal = (5000, 1500, 0)
     path, rpm_actions = a_star(start, goal, actions, obstacle_map, visualization=True)  # Ensure visualization matches your intent
     if path:
         execute_path(path, rpm_actions, obstacle_map, visualization=True)  # Corrected order and added visualization argument
