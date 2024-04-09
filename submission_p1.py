@@ -8,11 +8,11 @@ import heapq
 R = 33  # Radius of wheels in meters
 L = 160  # Distance between wheels in meters
 robot_diameter_mm = 440 # Approximation to the larger dimension in mm for clearance calculation
-user_clearance_mm = 30  # Additional clearance
+user_clearance_mm = 20  # Additional clearance
 total_clearance_mm = int((robot_diameter_mm / 2) + user_clearance_mm)
 map_width, map_height = 6000, 2000  # Map dimensions in pixels (assuming 1 pixel = 1 mm for simplicity)
 R1 = 50
-R2 = 50
+R2 = 70
 actions = [[0, R1], [R1, 0], [R1, R1], [0, R2], [R2, 0], [R2, R2], [R1, R2], [R2, R1]]
 # Weight for the heuristic function
 HEURISTIC_WEIGHT = 10 # Typical values might range from 1 to 2
