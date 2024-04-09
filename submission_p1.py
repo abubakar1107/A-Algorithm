@@ -5,60 +5,56 @@ import cv2
 import heapq
 
 # Robot parameters and map dimensions
-R = 33  # Radius of wheels in meters
-L = 160  # Distance between wheels in meters
-robot_diameter_mm = 440 # Approximation to the larger dimension in mm for clearance calculation
-user_clearance_mm = 20  # Additional clearance
-total_clearance_mm = int((robot_diameter_mm / 2) + user_clearance_mm)
-map_width, map_height = 6000, 2000  # Map dimensions in pixels (assuming 1 pixel = 1 mm for simplicity)
-R1 = 50
-R2 = 70
-actions = [[0, R1], [R1, 0], [R1, R1], [0, R2], [R2, 0], [R2, R2], [R1, R2], [R2, R1]]
-# Weight for the heuristic function
-HEURISTIC_WEIGHT = 10 # Typical values might range from 1 to 2
-
+R = 33  # Radius of wheels in mm
+L = 160  # Distance between wheels in mm
+map_width, map_height = 6000, 2000  # Map dimensions in pixels 
+HEURISTIC_WEIGHT = 10 # Weight for the heuristic A*
 def create_map(width, height, clearance):
-    obstacle_map = np.ones((height, width, 3), dtype=np.uint8) * 255  # White background
+    """
+    Function to create a map with bloated obstacles and clearance with robot radius
+    """
+    obstacle_map = np.ones((height, width, 3), dtype=np.uint8) * 255  
 
-    # Add obstacles with clearance
+    # actual obsactales
     cv2.rectangle(obstacle_map, (1500 - clearance, 0 - clearance), (1750 + clearance, 1000 + clearance), (255,0,0), -1)
     cv2.rectangle(obstacle_map, (2500 - clearance, 1000 - clearance), (2750 + clearance, 2000 + clearance), (0,255,0), -1)
     cv2.circle(obstacle_map, (4200, 800), 600 + clearance, (0, 0, 255), -1)
     
-    # Add clearance to the walls of the map
-    # Top border
+    #map walls as obstacles
     cv2.rectangle(obstacle_map, (0, 0), (width, clearance//10), (0,0,255), -1)
-    # Bottom border
     cv2.rectangle(obstacle_map, (0, height - (clearance//10)), (width, height), (0,0,255), -1)
-    # Left border
     cv2.rectangle(obstacle_map, (0, 0), (clearance//10, height), (0,0,255), -1)
-    # Right border
     cv2.rectangle(obstacle_map, (width - (clearance//10), 0), (width, height), (0,0,255), -1)
 
     return obstacle_map
 
 def create_map_vis(width, height, clearance=10):
-    obstacle_map = np.ones((height, width, 3), dtype=np.uint8) * 255  # White background
+    
+    """
+    Similar Function to create a map with obstacles and clearance for visualization without bloating
+    """
 
-    # Add obstacles with clearance
+    obstacle_map = np.ones((height, width, 3), dtype=np.uint8) * 255  
+
     cv2.rectangle(obstacle_map, (1500 - clearance, 0 - clearance), (1750 + clearance, 1000 + clearance), (255,0,0), -1)
     cv2.rectangle(obstacle_map, (2500 - clearance, 1000 - clearance), (2750 + clearance, 2000 + clearance), (0,255,0), -1)
     cv2.circle(obstacle_map, (4200, 800), 600 + clearance, (0, 0, 255), -1)
     
-    # Add clearance to the walls of the map
-    # Top border
+
     cv2.rectangle(obstacle_map, (0, 0), (width, clearance//10), (0,0,255), -1)
-    # Bottom border
     cv2.rectangle(obstacle_map, (0, height - (clearance//10)), (width, height), (0,0,255), -1)
-    # Left border
     cv2.rectangle(obstacle_map, (0, 0), (clearance//10, height), (0,0,255), -1)
-    # Right border
     cv2.rectangle(obstacle_map, (width - (clearance//10), 0), (width, height), (0,0,255), -1)
 
     return obstacle_map
-def calculate_new_position(x, y, theta, UL, UR, dt=0.05):
-    t= 0
 
+def calculate_new_position(x, y, theta, UL, UR, dt=0.075):
+
+    """
+    Calculates the new position of the robot based on the current position and the current velocity.
+    """
+
+    t= 0
     while t < 1:
         Vl = UL * (2 * np.pi * R) / 60
         Vr = UR * (2 * np.pi * R) / 60
@@ -72,12 +68,9 @@ def calculate_new_position(x, y, theta, UL, UR, dt=0.05):
   
     return x + Dx, y + Dy , (theta + np.degrees(Dtheta)) % 360
 
-def is_trajectory_collision_free(xi, yi, thetai, UL, UR, obstacle_map, dt=0.05):
+def is_trajectory_collision_free(xi, yi, thetai, UL, UR, obstacle_map, dt=0.075):
     """
-    Checks if the trajectory from the current position (xi, yi, thetai) using the given actions (UL, UR)
-    is free from collisions, focusing on start, end, and midpoint of the trajectory.
-
-    Parameters remain the same.
+    Checks if the trajectory from the current position to the next position is free from collisions
     """
     t = 0
     while t < 1:
@@ -98,44 +91,29 @@ def is_trajectory_collision_free(xi, yi, thetai, UL, UR, obstacle_map, dt=0.05):
     return True
 
 
-
 def is_collision_free(x, y, obstacle_map):
     """
-    Checks if the given position (x, y) is free from collisions, considering the obstacle map.
-
-    Parameters:
-    - x, y: Position coordinates to check.
-    - obstacle_map: The map with obstacles.
-
-    Returns:
-    - True if the position is collision-free, False otherwise.
+    Checks if the given position (x, y) is free from collisions.
     """
     if 0 <= x < obstacle_map.shape[1] and 0 <= y < obstacle_map.shape[0]:
         return np.all(obstacle_map[int(y), int(x)] == [255, 255, 255])
     return False
 
 def heuristic(a, b):
+    """
+    Calculates the heuristic distance (euclidian) between two points.
+    """
     return np.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
 def rpm_to_velocity(actions, R, L):
     """
-    Convert RPM actions to [linear_x, angular_z] format.
-
-    Parameters:
-    - actions: List of [RPM_l, RPM_r] actions.
-    - R: Radius of the wheels in meters.
-    - L: Distance between the wheels in meters.
-
-    Returns:
-    - List of [linear_x, angular_z] actions.
+    Convert RPM velocities to [linear_x, angular_z] format.
     """
     converted_actions = []
     for action in actions:
         RPM_l, RPM_r = action
-        # Convert RPM to linear velocity in meters per second
         V_l = RPM_l * (2 * np.pi * R) / 60
         V_r = RPM_r * (2 * np.pi * R) / 60
-        # Calculate linear and angular velocities
         linear_x = (V_r + V_l) / 2
         angular_z = (V_r - V_l) / L
         converted_actions.append([linear_x, angular_z])
@@ -151,26 +129,35 @@ def validate_position(x, y, obstacle_map):
     return np.all(obstacle_map[int(y), int(x)] == [255, 255, 255])
 
 def a_star(start, goal, actions, base_obstacle_map,vis_map, visualization=True):
-    open_set = []
+
+    """Actual A* algorithm logic, tuned for Phase 2 from Phase 1"""
+
+    open_set = [] # initialize open set
     heapq.heappush(open_set, (heuristic(start, goal), start))
     came_from = {}
     g_score = {start: 0}
-    visited = set()  # Set to store visited nodes
+    visited = set()  
     
-    THRESHOLD_DISTANCE = 100  # Set a threshold distance to the goal point
+    threshold_distance = 100  
     
-    # Inside the while loop of the a_star function
-    while open_set:
+    
+    while open_set: # While there are still open nodes
         current_f, current = heapq.heappop(open_set)
-    
-        # Check if the current node is close enough to the goal
-        if np.linalg.norm(np.array(current[:2]) - np.array(goal[:2])) < THRESHOLD_DISTANCE:
-            # Check if the current node is within the threshold distance of the goal
+
+        if visualization and len(came_from) % 50 == 0:
+            #visualize the exploration
+            visualize_exploration(vis_map, came_from, current)
+        # Check if the current node is close enough to the goal dnf if the current node is within the threshold distance of the goal
+        if np.linalg.norm(np.array(current[:2]) - np.array(goal[:2])) < threshold_distance:
+
             if not is_collision_free(current[0], current[1], base_obstacle_map):
+
                 continue  # Skip this node if it's not collision-free
             path, actions = reconstruct_path(came_from, current)
+
             if visualization:
                 visualize_path(vis_map, path, actions)
+                visualize_exploration(vis_map, came_from, current)
             return path, actions
         
         visited.add(current)  # Mark current node as visited
@@ -190,36 +177,27 @@ def a_star(start, goal, actions, base_obstacle_map,vis_map, visualization=True):
             if tentative_g_score < g_score.get(neighbor, float('inf')):
                 came_from[neighbor] = (current, action)
                 g_score[neighbor] = tentative_g_score
-                # Apply the heuristic weight
-                f_score = tentative_g_score + heuristic(neighbor, goal) * HEURISTIC_WEIGHT
+                # Apply the heuristic weight and check if the new node is closer to the goal
+                f_score = tentative_g_score + heuristic(neighbor, goal) * HEURISTIC_WEIGHT 
                 heapq.heappush(open_set, (f_score, neighbor))
 
         
-        if visualization and len(came_from) % 50 == 0:
-            
-            visualize_exploration(vis_map, came_from, current)
+        # if visualization and len(came_from) % 50 == 0:
+        #     #visualize the exploration
+        #     visualize_exploration(vis_map, came_from, current)
             
 
     return [], []
 
 def plot_actual_curve_on_map(canvas, Xi, Yi, Thetai, UL, UR, color=(0, 0, 0), thickness=2):
     """
-    Simulates and draws the actual curve taken by the robot from a parent node to a child node,
+    Draws the actual curve taken by the robot from a parent node to a child node,
     based on differential drive kinematics.
-
-    Parameters:
-    - canvas: The map canvas as a numpy array.
-    - Xi, Yi: Initial position coordinates in pixels.
-    - Thetai: Initial orientation angle in degrees.
-    - UL, UR: Left and right wheel speeds (RPM).
-    - color: The color of the curve.
-    - thickness: The thickness of the curve.
     """
-    dt = 0.1  # Time step for simulation
-    t = 0  # Current simulation time
-    duration = 1.0  # Total duration of the action
+    dt = 0.1  # Time step 
+    t = 0  # Current time
+    duration = 1.0  # Total duration
 
-    # Convert initial orientation to radians for calculations
     Thetai_rad = np.radians(Thetai)
 
     while t < duration:
@@ -229,7 +207,8 @@ def plot_actual_curve_on_map(canvas, Xi, Yi, Thetai, UL, UR, color=(0, 0, 0), th
         Vr = UR * (2 * np.pi * R) / 60
         # Calculate change in position
         Vx = (Vr + Vl) / 2.0
-        Vy = 0  # No lateral movement in differential drive
+        Vy = 0  
+
         # Calculate change in orientation
         omega = (Vr - Vl) / L
 
@@ -245,17 +224,18 @@ def plot_actual_curve_on_map(canvas, Xi, Yi, Thetai, UL, UR, color=(0, 0, 0), th
 
         # Draw segment
         cv2.line(canvas, (int(Xi), int(Yi)), (int(Xn), int(Yn)), color, thickness)
-
-        # Update for next iteration
         Xi, Yi, Thetai_rad = Xn, Yn, Thetan
 
-# Example usage within the visualization function
+
 def visualize_exploration(base_obstacle_map, came_from, current):
+
+    """
+    Function to visualize the exploration searched by the algorithm.
+    """
     vis_map = base_obstacle_map.copy()
     for node, (parent, action) in came_from.items():
         plot_actual_curve_on_map(vis_map, parent[0], parent[1], parent[2], action[0], action[1], color=(255, 0,255 ), thickness=2)
 
-    # Highlight the current node
     cv2.circle(vis_map, (int(current[0]), int(current[1])), 10, color=(0, 255, 0), thickness=-1)
 
     resized_vis_map = resize_map_for_display(vis_map)
@@ -263,26 +243,34 @@ def visualize_exploration(base_obstacle_map, came_from, current):
     cv2.waitKey(1)
 
 def visualize_path(base_obstacle_map, path, rpm_actions, scale_percent=20):
+
+    """
+    Function to visualize the path taken by the robot to reach the goal.
+    """
     vis_map = base_obstacle_map.copy()
     for i in range(len(path) - 1):
         Xi, Yi, Thetai = path[i]
-        UL, UR = rpm_actions[i]  # Assuming each item in rpm_actions is a list [UL, UR]
+        UL, UR = rpm_actions[i]  
 
-        # Now, call the plotting function with the current position, orientation, and RPM values
         plot_actual_curve_on_map(vis_map, Xi, Yi, Thetai, UL, UR, color=(0, 0, 0), thickness=10)
 
-    # After plotting the curves for the entire path, resize and display the map
     resized_vis_map = resize_map_for_display(vis_map, scale_percent)
     cv2.imshow('Final Path with Curves', resized_vis_map)
     cv2.waitKey(0)
 
-def resize_map_for_display(map_img, scale_percent=20):  # Change scale_percent to 10
+def resize_map_for_display(map_img, scale_percent=20): 
+    """
+    Function to resize a map image for display.
+    """
     width = int(map_img.shape[1] * scale_percent / 100)
     height = int(map_img.shape[0] * scale_percent / 100)
     return cv2.resize(map_img, (width, height), interpolation=cv2.INTER_AREA)
 
 
 def reconstruct_path(came_from, current):
+    """
+    Reconstructs the path from the current node back to the start node.
+    """
     path = []
     actions = []
     while current in came_from:
@@ -293,10 +281,12 @@ def reconstruct_path(came_from, current):
 
 
 def execute_path( path, rpm_actions,obstacle_map, visualization=True):
+
+    """
+    Function to execute the path taken by the robot and print the velocities.
+    """
     velocities = []
-    # ang_z = []
     if visualization:
-        # map = obstacle_map.copy()
         vis_map = resize_map_for_display(obstacle_map, 20)
         for idx, (x, y, _) in enumerate(path):
             cv2.circle(vis_map, (int(x), int(y)), 5, (0, 255, 0), -1)
@@ -304,40 +294,61 @@ def execute_path( path, rpm_actions,obstacle_map, visualization=True):
                 cv2.line(vis_map, (int(path[idx-1][0]/5), int(path[idx-1][1]/5)), (int(x/5), int(y/5)), (255, 0, 0), 2)
                 # cv2.imshow("Path Planning Visualization", obstacle_map)
                 cv2.waitKey(0)
-
     
     for i, action in enumerate(rpm_actions):
         # Convert RPM actions to linear and angular velocities
-        linear_x, angular_z = rpm_to_velocity([action], R, L)[0]  # Assuming rpm_to_velocity returns a list of [linear_x, angular_z]
+        linear_x, angular_z = rpm_to_velocity([action], R, L)[0] 
         velocities.append((linear_x/1000,-angular_z))
-    
+    print("\nVelocities to publish to cmd_vel:\n")
     print(velocities)
 
 def get_valid_position(prompt, obstacle_map):
+
+    """
+    Function to get a valid position from the user.
+    """
     while True:
-        position_str = input(prompt)  # Example format input: "x,y,theta"
+        position_str = input(prompt)  
         x, y, theta = map(int, position_str.split(','))
+        y = map_height - y 
         if validate_position(x, y, obstacle_map):
-            return x, y, theta
+            return (x, y, theta)
         else:
             print("Invalid position. The position is either out of bounds or within an obstacle.")
 
 
 
 def main(args=None):
+
+    """
+    Main function with User Inputs
+    """
+    
+    robot_diameter_mm = 440 # Robot outer diameter including wheels from documentation in mm
+    user_clearance_mm = int(input("Enter user clearance: "))  # Additional clearance in mm  
+    total_clearance_mm = int((robot_diameter_mm / 2) + user_clearance_mm)
+
     obstacle_map = create_map(map_width, map_height, total_clearance_mm)
-    start = (500, 1000, 0)  # Start position
-    goal = (5750, 1000, 0)  # Goal position, ensure to have a consistent format with start
-    # start = (100,1900, 0)
-    # goal = (5000, 1500, 0)
-    vis_map = create_map_vis(map_width, map_height)
-    path, rpm_actions = a_star(start, goal, actions, obstacle_map,vis_map, visualization=True)  # Ensure visualization matches your intent
+    vis_map = create_map_vis(map_width, map_height) 
+
+    start = get_valid_position("Enter start position (x, y, theta): ", obstacle_map)
+    goal = get_valid_position("Enter goal position (x, y, theta): ", obstacle_map)
+
+    R1 = int(input("Enter R1 (1st possible rpm): "))
+    R2 = int(input("Enter R2 (2nd possible rpm): "))
+    actions = [[0, R1], [R1, 0], [R1, R1], [0, R2], [R2, 0], [R2, R2], [R1, R2], [R2, R1]]
+
+
+    # start = (500, 1000, 0)  # Start position
+    # goal = (5750, 1000, 0)  # Goal position
+    
+    path, rpm_actions = a_star(start, goal, actions, obstacle_map,vis_map, visualization=True)  
     if path:
-        print(path)
-        execute_path(path, rpm_actions, obstacle_map, visualization=True)  # Corrected order and added visualization argument
+        print("Path: \n------------------",path, "\n------------------")
+        execute_path(path, rpm_actions, obstacle_map, visualization=True)  
     else:
         print('No path found.')
-    # cv2.destroyAllWindows()
+    
 
 
 if __name__ == '__main__':
